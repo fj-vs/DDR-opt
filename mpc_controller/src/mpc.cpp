@@ -1,6 +1,5 @@
 #include "mpc_controller/mpc.h"
 #include <nav_msgs/Path.h>
-#include "nav_msgs/Odometry.h"
 #include "tf/tf.h"
 #include "tf/transform_datatypes.h"
 
@@ -50,9 +49,9 @@ MpcController::MpcController(const ros::NodeHandle &nh){
 
     traj_sub_ = nh_.subscribe<carstatemsgs::Polynome>("traj", 1, &MpcController::TrajCallback, this);
     // odom_sub_ = nh_.subscribe<carstatemsgs::CarState>("odom", 1, &MpcController::OdomCallback, this);
-    odom_sub_ = nh_.subscribe<nav_msgs::Odometry>("odom", 1, &MpcController::OdomCallback, this);
+    odom_sub_ = nh_.subscribe<geometry_msgs::Pose2D>("/odom", 1, &MpcController::OdomCallback, this);
     sequence_pub_ = nh_.advertise<sensor_msgs::PointCloud2>("/mpc/sequence",1);
-    cmd_pub_ = nh_.advertise<carstatemsgs::CarState>("cmd",1);
+    cmd_pub_ = nh_.advertise<geometry_msgs::Twist>("/cmd_vel",1);
 
     Ref_path_pub_ = nh_.advertise<nav_msgs::Path>("/mpc/Ref_path",10);
     cmd_path_pub_ = nh_.advertise<nav_msgs::Path>("/mpc/cmd_path",10);
@@ -81,16 +80,16 @@ MpcController::MpcController(const ros::NodeHandle &nh){
 //     now_state_time_ = msg->Header.stamp;
 // }
 
-void MpcController::OdomCallback(const nav_msgs::Odometry::ConstPtr& msg){    
+void MpcController::OdomCallback(const geometry_msgs::Pose2D::ConstPtr& msg){    
     has_odom = true;
 
-    now_state.x = msg->pose.pose.position.x;
-    now_state.y = msg->pose.pose.position.y;
-    now_state.theta = tf::getYaw(msg->pose.pose.orientation);
+    now_state.x = msg->x;
+    now_state.y = msg->y;
+    now_state.theta = msg->theta;
     now_state.v = 0.0;
     now_state.w = 0.0;
 
-    now_state_time_ = msg->header.stamp;
+    now_state_time_ = ros::Time::now();
 
 }
 
@@ -140,16 +139,9 @@ void MpcController::CmdCallback(const ros::TimerEvent& event){
     }
 
     if (at_goal){
-        carstatemsgs::CarState cmd;
-        cmd.Header.frame_id = "world";
-        cmd.Header.stamp = ros::Time::now();
-        cmd.v = 0.0;
-        cmd.omega = 0.0;
-
-        cmd.a = 0.0;
-        cmd.alpha = 0.0;
-        cmd.js = 0.0;
-        cmd.jyaw = 0.0;
+        geometry_msgs::Twist cmd;
+        cmd.linear.x = 0.0;
+        cmd.angular.z = 0.0;
         cmd_pub_.publish(cmd);
         receive_traj_ = false;
         current_output << 0.0, 0.0;
@@ -167,22 +159,15 @@ void MpcController::CmdCallback(const ros::TimerEvent& event){
             }
             smooth_yaw();
             getCmd();
-            carstatemsgs::CarState cmd;
-            cmd.Header.frame_id = "world";
-            cmd.Header.stamp = ros::Time::now();
-            cmd.v = output(0, delay_num);
-            cmd.omega = output(1, delay_num);
-
-            cmd.a = 0.0;
-            cmd.alpha = 0.0;
-            cmd.js = 0.0;
-            cmd.jyaw = 0.0;
+            geometry_msgs::Twist cmd;
+            cmd.linear.x = output(0, delay_num);
+            cmd.angular.z = output(1, delay_num);
             cmd_pub_.publish(cmd);
 
             current_output = output.col(delay_num);
         }
         else{
-            carstatemsgs::CarState cmd;
+            geometry_msgs::Twist cmd;
             double t_cur = ros::Time::now().toSec() - start_time;
             
             if(t_cur > traj_duration){
@@ -192,15 +177,8 @@ void MpcController::CmdCallback(const ros::TimerEvent& event){
             Eigen::Vector2d curr_v = traj_.getVstate(t_cur);
             Eigen::Vector2d curr_a = traj_.getAstate(t_cur);
 
-            cmd.Header.frame_id = "world";
-            cmd.Header.stamp = ros::Time::now();
-            cmd.v = curr_v.y();
-            cmd.omega = curr_v.x();
-
-            cmd.a = curr_a.y();
-            cmd.alpha = curr_a.x();
-            cmd.js = 0.0;
-            cmd.jyaw = 0.0;
+            cmd.linear.x = curr_v.y();
+            cmd.angular.z = curr_v.x();
             cmd_pub_.publish(cmd);
         }
 
@@ -614,16 +592,9 @@ void MpcController::getCmd(void)
 }
 
 void MpcController::emergencyStop(const std_msgs::Bool::ConstPtr &msg){
-    carstatemsgs::CarState cmd;
-    cmd.Header.frame_id = "world";
-    cmd.Header.stamp = ros::Time::now();
-    cmd.v = 0.0;
-    cmd.omega = 0.0;
-
-    cmd.a = 0.0;
-    cmd.alpha = 0.0;
-    cmd.js = 0.0;
-    cmd.jyaw = 0.0;
+    geometry_msgs::Twist cmd;
+    cmd.linear.x = 0.0;
+    cmd.angular.z = 0.0;
     cmd_pub_.publish(cmd);
 
     receive_traj_ = false;

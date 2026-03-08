@@ -19,13 +19,14 @@
 #include <pcl/point_types.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/LaserScan.h>
+#include <geometry_msgs/Pose2D.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
 
 #include <carstatemsgs/CarState.h>
 
 #include <tf2_ros/transform_listener.h>
-#include <sensor_msgs/PointCloud2.h>
 #include <tf2_sensor_msgs/tf2_sensor_msgs.h>
 #include <tf/transform_datatypes.h>
 
@@ -50,7 +51,10 @@ class SDFmap
 
     // receive map && Odom
     ros::Subscriber cloud_sub_;
+    ros::Subscriber robot_pose_sub_;
     bool has_cloud_ = false;
+    bool has_robot_pose_ = false;
+    geometry_msgs::Pose2D robot_pose_;
     bool if_have_map_ = false;
     pcl::PointCloud<pcl::PointXYZ> cloud_;
 
@@ -129,7 +133,8 @@ class SDFmap
       vis_timer_ = nh_.createTimer(ros::Duration(0.5), &SDFmap::visCallback, this);
 
       // cloud_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>("/laser_simulator/local_pointcloud", 1, &SDFmap::pointCloudCallback, this);
-      cloud_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>("local_pointcloud", 1, &SDFmap::pointCloudCallback, this);
+      cloud_sub_ = nh_.subscribe<sensor_msgs::LaserScan>("/scan", 1, &SDFmap::scanCallback, this);
+      robot_pose_sub_ = nh_.subscribe<geometry_msgs::Pose2D>("/robot_pose", 1, &SDFmap::robotPoseCallback, this);
       // odom_sub_ = nh_.subscribe<carstatemsgs::CarState>("/odom", 1, &SDFmap::odomCallback, this);
 
       nh_.param<double>(ros::this_node::getName()+"/detection_range",detection_range_,5.0);
@@ -191,6 +196,8 @@ class SDFmap
     bool get_grid_map_;
 
     void pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg);
+    void scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg);
+    void robotPoseCallback(const geometry_msgs::Pose2D::ConstPtr &msg);
     // void odomCallback(const carstatemsgs::CarState::ConstPtr &msg);
 
     void updateOccupancyCallback(const ros::TimerEvent& /*event*/);

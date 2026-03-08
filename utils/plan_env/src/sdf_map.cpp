@@ -1,9 +1,37 @@
 #include "plan_env/sdf_map.h"
+#include <cmath>
 
 // void SDFmap::odomCallback(const carstatemsgs::CarState::ConstPtr &msg){
 //   odom_ = *msg;
 //   has_odom_ = true;
 // }
+
+void SDFmap::robotPoseCallback(const geometry_msgs::Pose2D::ConstPtr &msg){
+  robot_pose_ = *msg;
+  has_robot_pose_ = true;
+}
+
+void SDFmap::scanCallback(const sensor_msgs::LaserScan::ConstPtr &msg){
+  if(!has_robot_pose_) return;
+
+  odom_pos_ << robot_pose_.x, robot_pose_.y, robot_pose_.theta;
+  cloud_.clear();
+  cloud_.points.reserve(msg->ranges.size());
+
+  for(size_t i=0; i<msg->ranges.size(); ++i){
+    const float r = msg->ranges[i];
+    if(!std::isfinite(r) || r < msg->range_min || r > msg->range_max) continue;
+    const double ang = robot_pose_.theta + msg->angle_min + i * msg->angle_increment;
+    pcl::PointXYZ pt;
+    pt.x = robot_pose_.x + r * std::cos(ang);
+    pt.y = robot_pose_.y + r * std::sin(ang);
+    pt.z = 0.0;
+    cloud_.points.emplace_back(pt);
+  }
+
+  has_cloud_ = true;
+  occ_need_update_ = true;
+}
 
 void SDFmap::pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr &msg){
   static tf2_ros::Buffer tf_buffer(ros::Duration(10.0));
